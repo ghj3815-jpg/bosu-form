@@ -7,6 +7,10 @@
 *.bmp
 *.gif
 
+# UNI-PASS API 키 파일 (절대 올리지 않음)
+*API키*
+*apikey*
+
 # PC별 설정 · 기록
 settings.json
 *.log

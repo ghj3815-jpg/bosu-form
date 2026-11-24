@@ -114,6 +114,24 @@ function Push-History([string]$key, [string]$value) {
 $script:Dbs = @{ imp = @(); app = @() }
 $DbLabel = @{ imp = '수출(입)자'; app = '신청인' }
 function Get-DbPath([string]$kind) { return [string]$Settings["${kind}DbPath"] }
+# UNI-PASS API 키: 업체 DB 폴더(공유폴더)의 키 파일을 우선 사용 → 키가 바뀌면 이 파일 하나만 고치면 모든 PC에 적용
+$KeyFileName = 'UNI-PASS_API키.txt'
+function Get-SharedKeyPath {
+    $db = Get-DbPath 'app'
+    if (-not $db) { $db = Get-DbPath 'imp' }
+    if (-not $db) { return $null }
+    return (Join-Path (Split-Path -Parent $db) $KeyFileName)
+}
+function Read-SharedKey {
+    $p = Get-SharedKeyPath
+    if ($p -and (Test-Path -LiteralPath $p)) { try { return ([IO.File]::ReadAllText($p)).Trim() } catch { } }
+    return ''
+}
+function Get-ApiKey {
+    $k = Read-SharedKey
+    if ($k) { return $k }
+    return ([string]$Settings.apiKey).Trim()
+}
 function Read-DbFile([string]$path) {
     if (-not $path -or -not (Test-Path $path)) { return }
     Import-Csv -Path $path -Encoding UTF8 | Where-Object { $_.'상호' -and $_.'상호'.Trim() }
@@ -361,7 +379,7 @@ function Format-ApiDate([string]$s) {
 }
 # 반환: @{ count = 건수; vos = 화물 요약 노드들; dtls = 처리이력 노드들 }
 function Invoke-CargoApi([hashtable]$q) {
-    $key = ([string]$Settings.apiKey).Trim()
+    $key = Get-ApiKey
     if (-not $key) { throw "UNI-PASS API 키가 없습니다.`n[설정] 창의 'UNI-PASS API 키' 칸에 인증키를 입력하고 저장하세요." }
     $qs = @("crkyCn=$([Uri]::EscapeDataString($key))")
     foreach ($k in $q.Keys) { $qs += "$k=$([Uri]::EscapeDataString([string]$q[$k]))" }
@@ -382,7 +400,10 @@ function Invoke-CargoApi([hashtable]$q) {
     $cnt = 0; [void][int]::TryParse((Get-XmlText $root 'tCnt'), [ref]$cnt)
     $vos = @($root.SelectNodes('cargCsclPrgsInfoQryVo'))
     # 여러 건이면 "[N00] 조회 결과가 다건입니다..." 안내와 함께 화물 목록만 옴 → 오류 아님
-    if ($ntce -and $vos.Count -eq 0) { throw ('UNI-PASS API: ' + $ntce) }
+    if ($ntce -and $vos.Count -eq 0) {
+        $hint = $(if ($ntce -match '인증키') { "`n`n인증키가 만료되었거나 바뀌었다면 [설정]에서 새 키를 입력하고`n'공유폴더에 저장'을 체크해 저장하세요. (모든 PC에 적용)" } else { '' })
+        throw ('UNI-PASS API: ' + $ntce + $hint)
+    }
     return @{ count = $cnt
               vos   = $vos
               dtls  = @($root.SelectNodes('cargCsclPrgsInfoDtlQryVo')) }
@@ -979,10 +1000,10 @@ function Do-New {
 function Show-Settings {
     $f = New-Object System.Windows.Forms.Form
     $f.Text = '설정'; $f.Font = $UiFont; $f.StartPosition = 'CenterParent'; $f.FormBorderStyle = 'FixedDialog'
-    $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.ClientSize = New-Object System.Drawing.Size(650, 253)
+    $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.ClientSize = New-Object System.Drawing.Size(650, 283)
     $rows = @(@('서식 파일(xlsx)', $Settings.templatePath), @('수출입자 DB(csv)', $Settings.impDbPath),
               @('신청인 DB(csv)', $Settings.appDbPath), @('PDF 저장 폴더', $Settings.outDir),
-              @('UNI-PASS API 키', $Settings.apiKey))
+              @('UNI-PASS API 키', (Get-ApiKey)))
     $boxes = @()
     for ($i = 0; $i -lt 5; $i++) {
         $y = 15 + $i * 38
@@ -999,8 +1020,18 @@ function Show-Settings {
     $bImp  = New-Btn '찾기' 487 52 70;  $bImpN = New-Btn '새로 만들기' 561 52 82
     $bApp  = New-Btn '찾기' 487 90 70;  $bAppN = New-Btn '새로 만들기' 561 90 82
     $bOut  = New-Btn '찾기' 487 128 70
-    $ok = New-Object System.Windows.Forms.Button; $ok.Text = '저장'; $ok.Location = New-Object System.Drawing.Point(462, 213); $ok.Size = New-Object System.Drawing.Size(85, 30); $f.Controls.Add($ok)
-    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = '취소'; $cancel.Location = New-Object System.Drawing.Point(553, 213); $cancel.Size = New-Object System.Drawing.Size(85, 30); $f.Controls.Add($cancel)
+    $chkShareKey = New-Object System.Windows.Forms.CheckBox
+    $chkShareKey.Text = "API 키를 공유폴더(업체 DB 폴더의 $KeyFileName)에 저장해 모든 PC가 같이 사용"
+    $chkShareKey.Location = New-Object System.Drawing.Point(125, 192); $chkShareKey.Size = New-Object System.Drawing.Size(515, 22)
+    $chkShareKey.Checked = $true
+    $f.Controls.Add($chkShareKey)
+    $lKeySrc = New-Object System.Windows.Forms.Label
+    $lKeySrc.Location = New-Object System.Drawing.Point(142, 214); $lKeySrc.Size = New-Object System.Drawing.Size(500, 18)
+    $lKeySrc.ForeColor = [System.Drawing.Color]::Gray
+    $lKeySrc.Text = $(if (Read-SharedKey) { "현재: 공유 키 파일 사용 중 ($(Get-SharedKeyPath))" } elseif ($Settings.apiKey) { '현재: 이 PC에만 저장된 키 사용 중' } else { '현재: 키 없음' })
+    $f.Controls.Add($lKeySrc)
+    $ok = New-Object System.Windows.Forms.Button; $ok.Text = '저장'; $ok.Location = New-Object System.Drawing.Point(462, 243); $ok.Size = New-Object System.Drawing.Size(85, 30); $f.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = '취소'; $cancel.Location = New-Object System.Drawing.Point(553, 243); $cancel.Size = New-Object System.Drawing.Size(85, 30); $f.Controls.Add($cancel)
     $f.AcceptButton = $ok; $f.CancelButton = $cancel
 
     $bTpl.Add_Click({
@@ -1034,8 +1065,20 @@ function Show-Settings {
     if ($f.ShowDialog($form) -eq 'OK') {
         $Settings.templatePath = $tTpl.Text.Trim(); $Settings.impDbPath = $tImp.Text.Trim()
         $Settings.appDbPath = $tApp.Text.Trim(); $Settings.outDir = $tOut.Text.Trim()
-        $Settings.apiKey = $(if ($tKey.Text.Trim()) { $tKey.Text.Trim() } else { $DefaultApiKey })
+        $newKey = $tKey.Text.Trim()
+        $Settings.apiKey = $(if ($newKey) { $newKey } else { $DefaultApiKey })
         Save-Settings; Load-Db
+        # API 키 공유: DB 경로가 바뀐 뒤 기준으로 공유 키 파일에 저장
+        $kp = Get-SharedKeyPath
+        if ($chkShareKey.Checked -and $newKey) {
+            if (-not $kp) { Msg "업체 DB(csv) 경로가 없어 API 키를 공유폴더에 저장하지 못했습니다.`n이 PC에만 저장했습니다." 'Warning' }
+            elseif ($newKey -ne (Read-SharedKey)) {
+                try { [IO.File]::WriteAllText($kp, $newKey, (New-Object System.Text.UTF8Encoding($false))) }
+                catch { Msg ("API 키를 공유폴더에 저장하지 못했습니다. 이 PC에만 저장했습니다.`n" + $_.Exception.Message) 'Warning' }
+            }
+        } elseif ($newKey -and (Read-SharedKey) -and $newKey -ne (Read-SharedKey)) {
+            Msg "공유폴더에 다른 API 키 파일이 있어 그 키가 우선 사용됩니다.`n($kp)`n`n모든 PC의 키를 바꾸려면 '공유폴더에 저장'을 체크하고 저장하세요." 'Warning'
+        }
     }
 }
 

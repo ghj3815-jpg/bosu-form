@@ -33,6 +33,9 @@ try {
     $myKey = ''
     $sp = Join-Path $env:APPDATA 'BosuForm\settings.json'
     if (Test-Path $sp) { try { $myKey = [string](Get-Content $sp -Raw -Encoding UTF8 | ConvertFrom-Json).apiKey } catch { } }
+    $keyFile = Join-Path $here 'UNI-PASS_API키.txt'
+    $fileKey = ''
+    if (Test-Path -LiteralPath $keyFile) { $fileKey = ([IO.File]::ReadAllText($keyFile)).Trim() }
 
     $note = [Microsoft.VisualBasic.Interaction]::InputBox("이번 업데이트 내용을 적어주세요.`n(팀원 PC에서 업데이트될 때 안내창에 표시됩니다)`n`n취소하면 배포하지 않습니다.", '업데이트 배포', '')
     if (-not $note.Trim()) { exit 0 }
@@ -44,12 +47,12 @@ try {
     Invoke-Git add -A
     # 안전 점검 2: 올라가면 안 되는 파일 / 내 API 키가 들어간 파일이 있으면 중단
     $staged = @(& git.exe -c core.quotepath=false diff --cached --name-only)
-    $bad = $staged | Where-Object { $_ -match '\.(csv|png|jpe?g|bmp|gif|zip|log)$' -or $_ -match '(^|/)직인/' -or $_ -match 'settings\.json$' }
+    $bad = $staged | Where-Object { $_ -match '\.(csv|png|jpe?g|bmp|gif|zip|log)$' -or $_ -match '(^|/)직인/' -or $_ -match 'settings\.json$' -or $_ -match '(?i)API키|apikey' }
     if ($bad) { Invoke-Git reset -q; Fail ("올리면 안 되는 파일이 포함되어 배포를 중단했습니다:`n" + ($bad -join "`n")) }
-    if ($myKey) {
+    foreach ($k in @($myKey, $fileKey) | Where-Object { $_ }) {
         foreach ($f in $staged) {
             $p = Join-Path $here $f
-            if ((Test-Path -LiteralPath $p) -and ([IO.File]::ReadAllText($p)).Contains($myKey)) { Invoke-Git reset -q; Fail "API 키가 들어 있는 파일이 있어 배포를 중단했습니다: $f" }
+            if ((Test-Path -LiteralPath $p) -and ([IO.File]::ReadAllText($p)).Contains($k)) { Invoke-Git reset -q; Fail "API 키가 들어 있는 파일이 있어 배포를 중단했습니다: $f" }
         }
     }
 
