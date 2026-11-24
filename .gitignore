@@ -1,0 +1,16 @@
+# 업체 정보 · 직인 (절대 올리지 않음)
+*.csv
+직인/
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+
+# PC별 설정 · 기록
+settings.json
+*.log
+
+# 압축 · 임시 파일
+*.zip
+~$*
