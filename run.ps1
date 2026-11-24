@@ -5,7 +5,7 @@ $log = Join-Path $env:APPDATA 'BosuForm\error.log'
 # GitHub 저장소의 version.txt 가 내 version.txt 보다 새 것이면 최신 파일을 받아 덮어씀.
 # 인터넷이 안 되거나 실패하면 조용히 넘어가고 지금 버전으로 실행.
 # 관리자 개발 폴더(.git 있음)에서는 업데이트하지 않음.
-$Repo = 'ghj3815/bosu-form'; $Branch = 'main'
+$Repo = 'ghj3815-jpg/bosu-form'; $Branch = 'main'
 function Read-Text([string]$p) {
     if (Test-Path -LiteralPath $p) { return ([IO.File]::ReadAllText($p)).Trim() }
     return ''

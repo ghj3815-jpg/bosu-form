@@ -4,7 +4,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName Microsoft.VisualBasic
 $ErrorActionPreference = 'Stop'
-$RepoUrl = 'https://github.com/ghj3815/bosu-form.git'
+$RepoUrl = 'https://github.com/ghj3815-jpg/bosu-form.git'
 $here = $PSScriptRoot
 Set-Location -LiteralPath $here
 $Utf8Bom = New-Object System.Text.UTF8Encoding($true)
@@ -24,8 +24,8 @@ try {
         Invoke-Git remote add origin $RepoUrl
     }
     # 커밋 작성자 정보가 없으면 이 저장소에만 설정 (실제 이메일 대신 GitHub 비공개 주소)
-    & git.exe config user.name *> $null; if ($LASTEXITCODE -ne 0) { Invoke-Git config user.name 'ghj3815' }
-    & git.exe config user.email *> $null; if ($LASTEXITCODE -ne 0) { Invoke-Git config user.email 'ghj3815@users.noreply.github.com' }
+    & git.exe config user.name *> $null; if ($LASTEXITCODE -ne 0) { Invoke-Git config user.name 'ghj3815-jpg' }
+    & git.exe config user.email *> $null; if ($LASTEXITCODE -ne 0) { Invoke-Git config user.email 'ghj3815-jpg@users.noreply.github.com' }
 
     # 안전 점검 1: 코드에 API 키가 들어 있으면 중단
     $form = [IO.File]::ReadAllText((Join-Path $here 'bosu_form.ps1'))
